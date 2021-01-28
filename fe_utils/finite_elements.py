@@ -18,13 +18,12 @@ def lagrange_points(cell, degree):
     <ex-lagrange-points>`.
 
     """
-    
+
     if cell.dim == 1: # 1D case: equispaced points in [0, 1]
         return np.array([[i/degree] for i in range(degree+1)])
+        
     else: # 2D case: {(i/p, j/p) | i <= i+j <= p}
         return np.array([[i/degree, j/degree] for i in range(degree+1) for j in range(degree-i+1)])
-
-    raise NotImplementedError
 
 
 def vandermonde_matrix(cell, degree, points, grad=False):
@@ -42,7 +41,15 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     <ex-vandermonde>`.
     """
 
-    raise NotImplementedError
+    if cell.dim == 1: # 1D case
+        return np.array([[points[k][0]**j for j in range(degree+1)] for k in range(len(points))])
+
+    else: # 2D case
+        V = np.ones((len(points), 1)) # Initialize 1st column of Vandermonde matrix to 1
+        for i in range(1, degree + 1): # Total degree of the polynomial terms to be evaluated
+            for j in range(i + 1): # Evaluate the column x_k^(i-j) * y_k^j at each point (x_k, y_k)
+                V = np.hstack((V, [[(points[k][0]**(i-j))*(points[k][1]**(j))] for k in range(len(points))]))
+        return V
 
 
 class FiniteElement(object):
