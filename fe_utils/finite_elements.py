@@ -18,6 +18,11 @@ def lagrange_points(cell, degree):
     <ex-lagrange-points>`.
 
     """
+    
+    if cell.dim == 1: # 1D case: equispaced points in [0, 1]
+        return np.array([[i/degree] for i in range(degree+1)])
+    else: # 2D case: {(i/p, j/p) | i <= i+j <= p}
+        return np.array([[i/degree, j/degree] for i in range(degree+1) for j in range(degree-i+1)])
 
     raise NotImplementedError
 
