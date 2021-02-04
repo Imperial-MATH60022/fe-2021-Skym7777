@@ -91,7 +91,7 @@ class FiniteElement(object):
         # Replace this exception with some code which sets
         # self.basis_coefs
         # to an array of polynomial coefficients defining the basis functions.
-        raise NotImplementedError
+        self.basis_coefs = np.linalg.inv(vandermonde_matrix(cell, degree, nodes))
 
         #: The number of nodes in this element.
         self.node_count = nodes.shape[0]
@@ -117,7 +117,12 @@ class FiniteElement(object):
 
         """
 
-        raise NotImplementedError
+        # The tabulation matrix is given by (V(X:)*C)_{ij}, where
+        #  - C are the coeff. of the basis functions wrt monomial basis
+        #  - V(X:) is the Vandermonde matrix ev. at the quadrature points
+        V_X = vandermonde_matrix(self.cell, self.degree, points)
+        return np.dot(V_X, self.basis_coefs)
+
 
     def interpolate(self, fn):
         """Interpolate fn onto this finite element by evaluating it
@@ -156,7 +161,9 @@ class LagrangeElement(FiniteElement):
         <ex-lagrange-element>`.
         """
 
-        raise NotImplementedError
+        # Provide the nodes of the equispaced Lagrange elements:
+        nodes = lagrange_points(cell, degree)
+        
         # Use lagrange_points to obtain the set of nodes.  Once you
         # have obtained nodes, the following line will call the
         # __init__ method on the FiniteElement class to set up the
