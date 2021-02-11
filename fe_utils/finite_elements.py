@@ -44,14 +44,20 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     <ex-vandermonde>`.
     """
 
-    if cell.dim == 1: # 1D case
-        return np.array([[points[k][0]**j for j in range(degree+1)] for k in range(len(points))])
-
-    elif cell.dim == 2: # 2D case
-        return np.array([[ (points[k][0]**(i-j))*(points[k][1]**j) for i in range(0, degree+1) for j in range(i+1)] for k in range(len(points))])
+    if grad:
+        if cell.dim == 1: # Insert max(0, exp) in the exponents to avoid terms of the form 0*(x**(-1)) that give rise to NaN
+            return np.array([[[j*points[k][0]**(max(0,j-1))] for j in range(degree+1)] for k in range(len(points))] )
+        elif cell.dim == 2:
+            return np.array([[[((i-j)*points[k][0]**(max(0,i-j-1)))*(points[k][1]**j), (points[k][0]**(i-j))*(j*points[k][1]**(max(0,j-1)))] for i in range(0, degree+1) for j in range(i+1)] for k in range(len(points))])
 
     else:
-        raise Exception("A cell of degree > 2 has been passed.")
+        if cell.dim == 1: # 1D case
+            return np.array([[points[k][0]**j for j in range(degree+1)] for k in range(len(points))])
+        elif cell.dim == 2: # 2D case
+            return np.array([[(points[k][0]**(i-j))*(points[k][1]**j) for i in range(0, degree+1) for j in range(i+1)] for k in range(len(points))])
+
+    # If we are at this point of the function, it means cell.dim != 1, 2.
+    raise Exception("A cell of degree > 2 has been passed.")
 
 
 class FiniteElement(object):
@@ -118,12 +124,17 @@ class FiniteElement(object):
         <ex-tabulate>`.
 
         """
-
+        
         # The tabulation matrix is given by (V(X:)*C)_{ij}, where
         #  - C are the coeff. of the basis functions wrt monomial basis
         #  - V(X:) is the Vandermonde matrix ev. at the quadrature points
-        V_X = vandermonde_matrix(self.cell, self.degree, points)
-        return np.dot(V_X, self.basis_coefs)
+        # When grad=True, it is \nabla(V)·C, T_{ijk} = \nabla(\phi_j(X_i))·e_k
+
+        V_X = vandermonde_matrix(self.cell, self.degree, points, grad=grad)
+        if grad:
+            return np.einsum("ijk,jl->ilk", V_X, self.basis_coefs)
+        else:
+            return np.dot(V_X, self.basis_coefs)
 
 
     def interpolate(self, fn):
