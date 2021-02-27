@@ -1,5 +1,6 @@
 # Cause division to always mean floating point division.
 from __future__ import division
+from scipy.special import comb # Esto lo he añadido yo
 import numpy as np
 from .reference_elements import ReferenceInterval, ReferenceTriangle
 np.seterr(invalid='ignore', divide='ignore')
@@ -23,8 +24,8 @@ def lagrange_points(cell, degree):
         return np.array([[i/degree] for i in range(degree+1)])
         
     elif cell.dim == 2: # 2D case: {(i/p, j/p) | i <= i+j <= p}
-        return np.array([[i/degree, j/degree] for i in range(degree+1) for j in range(degree-i+1)])
-
+        return np.array([[i/degree, j/degree] for j in range(degree+1) for i in range(degree-j+1)])
+        
     else:
         raise Exception("A cell of degree > 2 has been passed.")
 
@@ -177,9 +178,28 @@ class LagrangeElement(FiniteElement):
 
         # Provide the nodes of the equispaced Lagrange elements:
         nodes = lagrange_points(cell, degree)
+
+        # Initialize entity_nodes dictionary:
+        if cell.dim == 1:
+            entities = [(0,0), (0,1), (1,0)]
+            entity_nodes = {0: {0: [], 1: []}, 1: {0: []}}
+        elif cell.dim == 2:
+            entities = [(0,0), (0,1), (0,2), (1,0), (1,1), (1,2), (2,0)]
+            entity_nodes =  {0: {0: [], 1: [], 2: []}, 1: {0: [], 1: [], 2: []}, 2: {0: []}}
+        else:
+            raise Exception("A cell of degree > 2 has been passed.")
+
+        # Associate each node with the reference entities
+        # The order will be correct since lagrange_points generates from bottom, left to right.
+        for i in range(len(nodes)):
+            for (x, y) in entities:
+                if cell.point_in_entity(nodes[i], (x, y)):
+                    entity_nodes[x][y].append(i)
+                    break # If we don't end the for loop with a break, some vertices are assigned
+                          # to multiple entities, returning an error
         
         # Use lagrange_points to obtain the set of nodes.  Once you
         # have obtained nodes, the following line will call the
         # __init__ method on the FiniteElement class to set up the
         # basis coefficients.
-        super(LagrangeElement, self).__init__(cell, degree, nodes)
+        super(LagrangeElement, self).__init__(cell, degree, nodes, entity_nodes=entity_nodes)
