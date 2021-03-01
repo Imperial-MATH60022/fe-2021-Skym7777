@@ -23,15 +23,34 @@ class FunctionSpace(object):
         #: The :class:`~.finite_elements.FiniteElement` of this space.
         self.element = element
 
-        raise NotImplementedError
-
         # Implement global numbering in order to produce the global
         # cell node list for this space.
         #: The global cell node list. This is a two-dimensional array in
         #: which each row lists the global nodes incident to the corresponding
         #: cell. The implementation of this member is left as an
         #: :ref:`exercise <ex-function-space>`
-        self.cell_nodes = None
+
+        # Array of number of dimension d entities in the mesh:
+        Ed = np.array([mesh.entity_counts[i] for i in range(mesh.dim+1)])
+        # Array of number of nodes of the FE associated with each entity of dim. d:
+        Nd = np.array([len(element.entity_nodes[i][0]) for i in range(mesh.dim+1)])
+        # Initialize M with size (number of vertices) x (number of elements in entity_nodes)
+        M = np.zeros((len(mesh.cell_vertices), sum([Nd[i]*len(element.entity_nodes[i]) for i in range(len(Nd))])), dtype=int)
+
+        # Iterate over rows corresponding to each cell c:
+        for c in range(mesh.entity_counts[mesh.dim]):
+            for delta in element.entity_nodes:
+                for epsilon in element.entity_nodes[delta]:
+                    if delta < mesh.dim: # Find global entity associated to the (delta, eps) local entity:
+                        i = mesh.adjacency(mesh.dim, delta)[c, epsilon]
+                    else: # Convention extension to adjacency:
+                        i = c
+                    # Formula for first global node associated with entity (d, i):
+                    Gd = Ed[0:delta] @ Nd[0:delta] + i*Nd[delta]
+                    # Define cell-node map entries:
+                    M[c, element.entity_nodes[delta][epsilon]] = np.array([Gd + j for j in range(0, Nd[delta])])
+        
+        self.cell_nodes = M
 
         #: The total number of nodes in the function space.
         self.node_count = np.dot(element.nodes_per_entity, mesh.entity_counts)
