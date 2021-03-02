@@ -152,7 +152,7 @@ class FiniteElement(object):
         <ex-interpolate>`.
 
         """
-        print('self.nodes = ', self.nodes)
+        
         return [fn(x) for x in self.nodes]
 
 

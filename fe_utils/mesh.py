@@ -2,6 +2,7 @@ from scipy.spatial import Delaunay
 import numpy as np
 import itertools
 from .finite_elements import LagrangeElement
+from .function_spaces import FunctionSpace # Added for jacobian function
 from .reference_elements import ReferenceTriangle, ReferenceInterval
 
 
@@ -111,8 +112,23 @@ class Mesh(object):
         :result: The Jacobian for cell ``c``.
         """
 
-        raise NotImplementedError
+        # Create linear Lagrange element and its corresponding FunctionSpace:
+        cg1 = LagrangeElement(self.cell, 1)
+        cg1fs = FunctionSpace(self, cg1)
 
+        # cg1.entity_nodes[0][i] gives the columns of the cell-node map M[c,:] where the global 
+        # numbers of the entities associated to the local vertices (0,0),(0,1),(0,2) are stored:
+        v_index = np.squeeze(cg1fs.cell_nodes[c, [cg1.entity_nodes[0][i] for i in cg1.entity_nodes[0]]])
+        # global_coord[:, i] are the global coord. of each vertex point, 0 <= i < self.dim+1:
+        global_coord = self.vertex_coords[v_index].T
+        # Choose to evaluate the constant Jacobian at the cell origin:
+        X_local = [np.zeros(self.dim)]
+        
+        # Use tabulate with grad=True to calculate function gradient:
+        gradient_matrix = cg1.tabulate(X_local, grad=True).reshape((self.dim+1,self.dim))
+        
+        return global_coord @ gradient_matrix
+    
 
 class UnitIntervalMesh(Mesh):
     """A mesh of the unit interval."""
