@@ -4,6 +4,7 @@ from .finite_elements import LagrangeElement, lagrange_points
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.tri import Triangulation
+from .quadrature import gauss_quadrature # Added to implement integrate() method
 
 
 class FunctionSpace(object):
@@ -186,4 +187,24 @@ class Function(object):
 
         :result: The integral (a scalar)."""
 
-        raise NotImplementedError
+        # Construct exact quadrature rule for the FE space studied:
+        fs = self.function_space
+        fe = fs.element
+        Q = gauss_quadrature(fe.cell, fe.degree)
+
+        # Tabulate the basis functions at each quadrature point:
+        phi = fe.tabulate(Q.points)
+
+        # Visit each cell in turn:
+        integral = 0.
+        for c in range(fs.mesh.entity_counts[-1]):
+            # Find the appropriate global node numbers for this cell:
+            nodes = fs.cell_nodes[c, :]
+            # Construct the jacobian for the cell:
+            J = fs.mesh.jacobian(c)
+            detJ = np.abs(np.linalg.det(J))
+
+            # Compute cell quadrature and sum contribution to the integral:
+            integral += np.dot(np.dot(self.values[nodes], phi.T), Q.weights) * detJ
+
+        return integral
