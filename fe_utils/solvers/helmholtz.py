@@ -15,20 +15,46 @@ def assemble(fs, f):
     the function space in which to solve and the right hand side
     function."""
 
-    raise NotImplementedError
-
     # Create an appropriate (complete) quadrature rule.
+    fe = fs.element
+    Q = gauss_quadrature(fe.cell, fe.degree)
 
     # Tabulate the basis functions and their gradients at the quadrature points.
-
+    phi = fe.tabulate(Q.points) # Dimensions: #{quadrature points} x #{basis functions}
+    phi_grad = fe.tabulate(Q.points, grad=True) # Dimensions: #{quadrature points} x #{basis functions} x #{dim.}
+    # phi[:,i], phi_grad[:,i,:] store the basis function i evaluated at each Q.points.
+                  
     # Create the left hand side matrix and right hand side vector.
     # This creates a sparse matrix because creating a dense one may
     # well run your machine out of memory!
     A = sp.lil_matrix((fs.node_count, fs.node_count))
     l = np.zeros(fs.node_count)
 
-    # Now loop over all the cells and assemble A and l
+    # Now loop over all the cells and assemble A and l:
+    for c in range(fs.mesh.entity_counts[-1]):
 
+        # Find the appropriate global node numbers for this cell:
+        nodes = fs.cell_nodes[c, :]
+        # Construct the jacobian for the cell:
+        J = fs.mesh.jacobian(c)
+        detJ = np.abs(np.linalg.det(J))
+        invJT = np.linalg.inv(J.T)
+
+        # Implement products in equation (6.72):
+        v = np.array([np.dot( phi[:,i] * Q.weights, np.dot( f.values[nodes], phi.T ) ) * detJ for i in range(len(nodes))])
+                
+        # Equation (6.78):
+        m = np.zeros((len(nodes), len(nodes)))
+        for i in range(len(nodes)):
+            for j in range(len(nodes)):
+                aux = np.array([np.dot( invJT @ phi_grad[q,i,:], invJT @ phi_grad[q,j,:] ) + phi[q,i]*phi[q,j] for q in range(len(Q.points))])
+                m[i, j] = np.dot(aux, Q.weights) * detJ
+
+        A[np.ix_(nodes, nodes)] += m
+        l[nodes] += v
+
+    # It seems like something is wrong...
+    # test_11_helmholtz_convergence.py never finishes running
     return A, l
 
 

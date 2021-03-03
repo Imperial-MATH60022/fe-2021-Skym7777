@@ -72,6 +72,13 @@ class Mesh(object):
         #: :class:`Mesh` is composed.
         self.cell = (0, ReferenceInterval, ReferenceTriangle)[self.dim]
 
+        # Choose to evaluate the constant Jacobian at the cell origin:
+        X_local = [np.zeros(self.dim)]
+        
+        # Use tabulate with grad=True to calculate basis functions at the origin:
+        cg1 = LagrangeElement(self.cell, 1)
+        self.tabulate_grad_origin = cg1.tabulate(X_local, grad=True).reshape((self.dim+1,self.dim))
+
     def adjacency(self, dim1, dim2):
         """Return the set of `dim2` entities adjacent to each `dim1`
         entity. For example if `dim1==2` and `dim2==1` then return the list of
@@ -121,11 +128,9 @@ class Mesh(object):
         v_index = np.squeeze(cg1fs.cell_nodes[c, [cg1.entity_nodes[0][i] for i in cg1.entity_nodes[0]]])
         # global_coord[:, i] are the global coord. of each vertex point, 0 <= i < self.dim+1:
         global_coord = self.vertex_coords[v_index].T
-        # Choose to evaluate the constant Jacobian at the cell origin:
-        X_local = [np.zeros(self.dim)]
         
-        # Use tabulate with grad=True to calculate function gradient:
-        gradient_matrix = cg1.tabulate(X_local, grad=True).reshape((self.dim+1,self.dim))
+        # Use the variable implemented in __init__() to tabulate the gradients at the cell origin:
+        gradient_matrix = self.tabulate_grad_origin
         
         return global_coord @ gradient_matrix
     
