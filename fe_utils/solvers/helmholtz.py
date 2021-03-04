@@ -22,7 +22,7 @@ def assemble(fs, f):
     # Tabulate the basis functions and their gradients at the quadrature points.
     phi = fe.tabulate(Q.points) # Dimensions: #{quadrature points} x #{basis functions}
     phi_grad = fe.tabulate(Q.points, grad=True) # Dimensions: #{quadrature points} x #{basis functions} x #{dim.}
-    # phi[:,i], phi_grad[:,i,:] store the basis function i evaluated at each Q.points.
+    # phi[:,i], phi_grad[:,i,:] store the basis function i or its grad. evaluated at each Q.points.
                   
     # Create the left hand side matrix and right hand side vector.
     # This creates a sparse matrix because creating a dense one may
@@ -35,26 +35,23 @@ def assemble(fs, f):
 
         # Find the appropriate global node numbers for this cell:
         nodes = fs.cell_nodes[c, :]
+
         # Construct the jacobian for the cell:
         J = fs.mesh.jacobian(c)
         detJ = np.abs(np.linalg.det(J))
-        invJT = np.linalg.inv(J.T)
+        invJ = np.linalg.inv(J)
 
         # Implement products in equation (6.72):
-        v = np.array([np.dot( phi[:,i] * Q.weights, np.dot( f.values[nodes], phi.T ) ) * detJ for i in range(len(nodes))])
+        v = detJ * np.einsum('qi,k,qk,q->i', phi, f.values[nodes], phi, Q.weights)
                 
         # Equation (6.78):
-        m = np.zeros((len(nodes), len(nodes)))
-        for i in range(len(nodes)):
-            for j in range(len(nodes)):
-                aux = np.array([np.dot( invJT @ phi_grad[q,i,:], invJT @ phi_grad[q,j,:] ) + phi[q,i]*phi[q,j] for q in range(len(Q.points))])
-                m[i, j] = np.dot(aux, Q.weights) * detJ
+        aux_m = np.einsum("ba,qib,ca,qjc->ijq", invJ, phi_grad, invJ, phi_grad) + np.einsum("qi,qj -> ijq", phi, phi)
+        m = detJ * np.dot(aux_m, Q.weights)
 
         A[np.ix_(nodes, nodes)] += m
         l[nodes] += v
 
-    # It seems like something is wrong...
-    # test_11_helmholtz_convergence.py never finishes running
+    # I still obtain "1 failed, 2 passed" for test_11_helmholtz_convergence.py...
     return A, l
 
 

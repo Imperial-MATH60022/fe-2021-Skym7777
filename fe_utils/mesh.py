@@ -74,9 +74,12 @@ class Mesh(object):
 
         # Choose to evaluate the constant Jacobian at the cell origin:
         X_local = [np.zeros(self.dim)]
-        
-        # Use tabulate with grad=True to calculate basis functions at the origin:
+
+        # Create linear Lagrange element and its corresponding FunctionSpace:
         cg1 = LagrangeElement(self.cell, 1)
+        self.cg1fs = FunctionSpace(self, cg1)
+
+        # Use tabulate with grad=True to calculate basis functions at the origin:
         self.tabulate_grad_origin = cg1.tabulate(X_local, grad=True).reshape((self.dim+1,self.dim))
 
     def adjacency(self, dim1, dim2):
@@ -119,16 +122,12 @@ class Mesh(object):
         :result: The Jacobian for cell ``c``.
         """
 
-        # Create linear Lagrange element and its corresponding FunctionSpace:
-        cg1 = LagrangeElement(self.cell, 1)
-        cg1fs = FunctionSpace(self, cg1)
+        # Store global numbers of entities associated to local vertices (0,0),(0,1),(0,2):
+        v_index = self.cg1fs.cell_nodes[c, :]
 
-        # cg1.entity_nodes[0][i] gives the columns of the cell-node map M[c,:] where the global 
-        # numbers of the entities associated to the local vertices (0,0),(0,1),(0,2) are stored:
-        v_index = np.squeeze(cg1fs.cell_nodes[c, [cg1.entity_nodes[0][i] for i in cg1.entity_nodes[0]]])
         # global_coord[:, i] are the global coord. of each vertex point, 0 <= i < self.dim+1:
         global_coord = self.vertex_coords[v_index].T
-        
+
         # Use the variable implemented in __init__() to tabulate the gradients at the cell origin:
         gradient_matrix = self.tabulate_grad_origin
         
