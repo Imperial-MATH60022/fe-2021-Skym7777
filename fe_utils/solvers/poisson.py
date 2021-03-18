@@ -17,8 +17,55 @@ def assemble(fs, f):
     """Assemble the finite element system for the Poisson problem given
     the function space in which to solve and the right hand side
     function."""
+    
+    # Create an appropriate (complete) quadrature rule.
+    fe = fs.element
+    Q = gauss_quadrature(fe.cell, fe.degree+1)
 
-    raise NotImplementedError
+    # Tabulate the basis functions and their gradients at the quadrature points.
+    phi = fe.tabulate(Q.points) # Dimensions: #{quadrature points} x #{basis functions}
+    phi_grad = fe.tabulate(Q.points, grad=True) # Dimensions: #{quadrature points} x #{basis functions} x #{dim.}
+    # phi[:,i], phi_grad[:,i,:] store the basis function i or its grad. evaluated at each Q.points.
+                  
+    # Create the left hand side matrix and right hand side vector.
+    # This creates a sparse matrix because creating a dense one may
+    # well run your machine out of memory!
+    A = sp.lil_matrix((fs.node_count, fs.node_count))
+    l = np.zeros(fs.node_count)
+
+    # Now loop over all the cells and assemble A and l ignoring the Dirichlet conditions:
+    for c in range(fs.mesh.entity_counts[-1]):
+
+        # Find the appropriate global node numbers for this cell:
+        nodes = fs.cell_nodes[c, :]
+
+        # Construct the jacobian for the cell:
+        J = fs.mesh.jacobian(c)
+        detJ = np.abs(np.linalg.det(J))
+        invJ = np.linalg.inv(J)
+
+        # Implement modified products in equation (6.72) corresponding to the problem in (7.4):
+        v = detJ * np.einsum('qi,k,qk,q->i', phi, f.values[nodes], phi, Q.weights)
+                
+        # Equation (6.78):
+        aux_m = np.einsum("ba,qib,ca,qjc->ijq", invJ, phi_grad, invJ, phi_grad)
+        m = detJ * np.dot(aux_m, Q.weights)
+
+        A[np.ix_(nodes, nodes)] += m
+        l[nodes] += v
+
+    # Implement Dirichlet conditions:
+    list_bound_nodes = boundary_nodes(fs) 
+    for i in list_bound_nodes:
+        
+        # Set global matrix rows of boundary nodes to 0 (except diagonal term):
+        A[i, :] = np.zeros(fs.node_count)
+        A[i, i] = 1  # Set diagonal term to 1.
+
+        # Set global vector rows of boundary nodes to 0:
+        l[i] = 0
+
+    return A, l
 
 
 def boundary_nodes(fs):
