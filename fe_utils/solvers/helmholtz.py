@@ -17,7 +17,7 @@ def assemble(fs, f):
 
     # Create an appropriate (complete) quadrature rule.
     fe = fs.element
-    Q = gauss_quadrature(fe.cell, fe.degree)
+    Q = gauss_quadrature(fe.cell, fe.degree+1)
 
     # Tabulate the basis functions and their gradients at the quadrature points.
     phi = fe.tabulate(Q.points) # Dimensions: #{quadrature points} x #{basis functions}
@@ -51,7 +51,6 @@ def assemble(fs, f):
         A[np.ix_(nodes, nodes)] += m
         l[nodes] += v
 
-    # I still obtain "1 failed, 2 passed" for test_11_helmholtz_convergence.py...
     return A, l
 
 

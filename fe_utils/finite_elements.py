@@ -179,25 +179,19 @@ class LagrangeElement(FiniteElement):
         # Provide the nodes of the equispaced Lagrange elements:
         nodes = lagrange_points(cell, degree)
 
-        # Initialize entity_nodes dictionary:
-        if cell.dim == 1:
-            entities = [(0,0), (0,1), (1,0)]
-            entity_nodes = {0: {0: [], 1: []}, 1: {0: []}}
-        elif cell.dim == 2:
-            entities = [(0,0), (0,1), (0,2), (1,0), (1,1), (1,2), (2,0)]
-            entity_nodes =  {0: {0: [], 1: [], 2: []}, 1: {0: [], 1: [], 2: []}, 2: {0: []}}
-        else:
-            raise Exception("A cell of degree > 2 has been passed.")
-
+        # Initialize entity_nodes dictionary and auxiliary entities vector:
+        entity_nodes = {x: {y: [] for y in cell.topology[x]} for x in cell.topology}
+        entities = [(x, y) for x in entity_nodes for y in entity_nodes[x]]
+        
         # Associate each node with the reference entities
         # The order will be correct since lagrange_points generates from bottom, left to right.
         for i in range(len(nodes)):
-            for (x, y) in entities:
-                if cell.point_in_entity(nodes[i], (x, y)):
-                    entity_nodes[x][y].append(i)
+            for entity in entities:
+                if cell.point_in_entity(nodes[i], entity):
+                    entity_nodes[entity[0]][entity[1]].append(i)
                     break # If we don't end the for loop with a break, some vertices are assigned
                           # to multiple entities, returning an error
-        
+       
         # Use lagrange_points to obtain the set of nodes.  Once you
         # have obtained nodes, the following line will call the
         # __init__ method on the FiniteElement class to set up the
