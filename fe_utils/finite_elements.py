@@ -1,5 +1,6 @@
 # Cause division to always mean floating point division.
 from __future__ import division
+from scipy.special import comb # Esto lo he añadido yo
 import numpy as np
 from .reference_elements import ReferenceInterval, ReferenceTriangle
 np.seterr(invalid='ignore', divide='ignore')
@@ -19,7 +20,14 @@ def lagrange_points(cell, degree):
 
     """
 
-    raise NotImplementedError
+    if cell.dim == 1: # 1D case: equispaced points in [0, 1]
+        return np.array([[i/degree] for i in range(degree+1)])
+        
+    elif cell.dim == 2: # 2D case: {(i/p, j/p) | i <= i+j <= p}
+        return np.array([[i/degree, j/degree] for j in range(degree+1) for i in range(degree-j+1)])
+        
+    else:
+        raise Exception("A cell of degree > 2 has been passed.")
 
 
 def vandermonde_matrix(cell, degree, points, grad=False):
@@ -37,7 +45,20 @@ def vandermonde_matrix(cell, degree, points, grad=False):
     <ex-vandermonde>`.
     """
 
-    raise NotImplementedError
+    if grad:
+        if cell.dim == 1: # Insert max(0, exp) in the exponents to avoid terms of the form 0*(x**(-1)) that give rise to NaN
+            return np.array([[[j*points[k][0]**(max(0,j-1))] for j in range(degree+1)] for k in range(len(points))] )
+        elif cell.dim == 2:
+            return np.array([[[((i-j)*points[k][0]**(max(0,i-j-1)))*(points[k][1]**j), (points[k][0]**(i-j))*(j*points[k][1]**(max(0,j-1)))] for i in range(0, degree+1) for j in range(i+1)] for k in range(len(points))])
+
+    else:
+        if cell.dim == 1: # 1D case
+            return np.array([[points[k][0]**j for j in range(degree+1)] for k in range(len(points))])
+        elif cell.dim == 2: # 2D case
+            return np.array([[(points[k][0]**(i-j))*(points[k][1]**j) for i in range(0, degree+1) for j in range(i+1)] for k in range(len(points))])
+
+    # If we are at this point of the function, it means cell.dim != 1, 2.
+    raise Exception("A cell of degree > 2 has been passed.")
 
 
 class FiniteElement(object):
@@ -79,7 +100,7 @@ class FiniteElement(object):
         # Replace this exception with some code which sets
         # self.basis_coefs
         # to an array of polynomial coefficients defining the basis functions.
-        raise NotImplementedError
+        self.basis_coefs = np.linalg.inv(vandermonde_matrix(cell, degree, nodes))
 
         #: The number of nodes in this element.
         self.node_count = nodes.shape[0]
@@ -104,8 +125,18 @@ class FiniteElement(object):
         <ex-tabulate>`.
 
         """
+        
+        # The tabulation matrix is given by (V(X:)*C)_{ij}, where
+        #  - C are the coeff. of the basis functions wrt monomial basis
+        #  - V(X:) is the Vandermonde matrix ev. at the quadrature points
+        # When grad=True, it is \nabla(V)·C, T_{ijk} = \nabla(\phi_j(X_i))·e_k
 
-        raise NotImplementedError
+        V_X = vandermonde_matrix(self.cell, self.degree, points, grad=grad)
+        if grad:
+            return np.einsum("ijk,jl->ilk", V_X, self.basis_coefs)
+        else:
+            return np.dot(V_X, self.basis_coefs)
+
 
     def interpolate(self, fn):
         """Interpolate fn onto this finite element by evaluating it
@@ -121,8 +152,9 @@ class FiniteElement(object):
         <ex-interpolate>`.
 
         """
+        
+        return [fn(x) for x in self.nodes]
 
-        raise NotImplementedError
 
     def __repr__(self):
         return "%s(%s, %s)" % (self.__class__.__name__,
@@ -144,9 +176,24 @@ class LagrangeElement(FiniteElement):
         <ex-lagrange-element>`.
         """
 
-        raise NotImplementedError
+        # Provide the nodes of the equispaced Lagrange elements:
+        nodes = lagrange_points(cell, degree)
+
+        # Initialize entity_nodes dictionary and auxiliary entities vector:
+        entity_nodes = {x: {y: [] for y in cell.topology[x]} for x in cell.topology}
+        entities = [(x, y) for x in entity_nodes for y in entity_nodes[x]]
+        
+        # Associate each node with the reference entities
+        # The order will be correct since lagrange_points generates from bottom, left to right.
+        for i in range(len(nodes)):
+            for entity in entities:
+                if cell.point_in_entity(nodes[i], entity):
+                    entity_nodes[entity[0]][entity[1]].append(i)
+                    break # If we don't end the for loop with a break, some vertices are assigned
+                          # to multiple entities, returning an error
+       
         # Use lagrange_points to obtain the set of nodes.  Once you
         # have obtained nodes, the following line will call the
         # __init__ method on the FiniteElement class to set up the
         # basis coefficients.
-        super(LagrangeElement, self).__init__(cell, degree, nodes)
+        super(LagrangeElement, self).__init__(cell, degree, nodes, entity_nodes=entity_nodes)

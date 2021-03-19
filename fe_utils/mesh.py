@@ -2,6 +2,7 @@ from scipy.spatial import Delaunay
 import numpy as np
 import itertools
 from .finite_elements import LagrangeElement
+from .function_spaces import FunctionSpace # Added for jacobian function
 from .reference_elements import ReferenceTriangle, ReferenceInterval
 
 
@@ -71,6 +72,16 @@ class Mesh(object):
         #: :class:`Mesh` is composed.
         self.cell = (0, ReferenceInterval, ReferenceTriangle)[self.dim]
 
+        # Choose to evaluate the constant Jacobian at the cell origin:
+        X_local = [np.zeros(self.dim)]
+
+        # Create linear Lagrange element and its corresponding FunctionSpace:
+        cg1 = LagrangeElement(self.cell, 1)
+        self.cg1fs = FunctionSpace(self, cg1)
+
+        # Use tabulate with grad=True to calculate basis functions at the origin:
+        self.tabulate_grad_origin = cg1.tabulate(X_local, grad=True).reshape((self.dim+1,self.dim))
+
     def adjacency(self, dim1, dim2):
         """Return the set of `dim2` entities adjacent to each `dim1`
         entity. For example if `dim1==2` and `dim2==1` then return the list of
@@ -111,8 +122,17 @@ class Mesh(object):
         :result: The Jacobian for cell ``c``.
         """
 
-        raise NotImplementedError
+        # Store global numbers of entities associated to local vertices (0,0),(0,1),(0,2):
+        v_index = self.cg1fs.cell_nodes[c, :]
 
+        # global_coord[:, i] are the global coord. of each vertex point, 0 <= i < self.dim+1:
+        global_coord = self.vertex_coords[v_index].T
+
+        # Use the variable implemented in __init__() to tabulate the gradients at the cell origin:
+        gradient_matrix = self.tabulate_grad_origin
+        
+        return global_coord @ gradient_matrix
+    
 
 class UnitIntervalMesh(Mesh):
     """A mesh of the unit interval."""
