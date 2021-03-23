@@ -153,6 +153,7 @@ class FiniteElement(object):
 
         """
         
+
         return [fn(x) for x in self.nodes]
 
 
@@ -197,3 +198,118 @@ class LagrangeElement(FiniteElement):
         # __init__ method on the FiniteElement class to set up the
         # basis coefficients.
         super(LagrangeElement, self).__init__(cell, degree, nodes, entity_nodes=entity_nodes)
+
+
+class VectorFiniteElement(FiniteElement): # Como modifico esta linea?
+    def __init__(self, element):
+        """A vector finite element constructed from the scalar
+        finite element class (FiniteElement).
+
+        :param cell: the :class:`~.reference_elements.ReferenceCell`
+            over which the element is defined.
+        :param degree: the
+            polynomial degree of the element. We assume the element
+            spans the complete polynomial space.
+        :param nodes: a list of coordinate tuples corresponding to
+            the nodes of the element.
+        :param entity_nodes: a dictionary of dictionaries such that
+            entity_nodes[d][i] is the list of nodes associated with entity `(d, i)`.
+
+        """
+        # Scalar finite element under consideration:
+        self.element = element
+
+        # cell, degree remain unchanged:
+        self.cell = element.cell
+        self.degree = element.degree
+        
+        # Nodes are the same as the input scalar element, but with each of
+        # them repeated d(=2) times:
+        self.nodes = np.zeros((2*len(element.nodes), 2))
+        for i in range(len(element.nodes)):
+            self.nodes[2*i:2*(i+1),:] = [element.nodes[i], element.nodes[i]]
+
+        # Add node_weights: a rank-2 array whose i-th row is the canonical 
+        # basis vector to contract with the function value at the
+        # i-th node (i.e. e_{i%d}):
+        self.node_weights = np.array([[i%2, (i+1)%2] for i in range(self.nodes.shape[0])])
+
+        # Given the scalar version of entity_nodes, we replace each node n
+        # by 2n, 2n+1 for all n:
+        
+        # Initialize the dictionary:
+        self.entity_nodes = {x: {y: [] for y in self.cell.topology[x]} for x in self.cell.topology}
+        # Replace each n by 2n, 2n+1:
+        f1, f2 = lambda x: 2*x, lambda x: 2*x + 1
+        for d in element.entity_nodes: # Iterate over all elements
+            for i, n in element.entity_nodes[d].items():
+                self.entity_nodes[d][i] = [f(aux) for aux in n for f in (f1,f2)]
+        
+        if element.entity_nodes:
+            # nodes_per_entity[d] is the number of entities associated with an entity 
+            # of dimension d (i.e. the scalar version multiplied by d = 2):
+            self.nodes_per_entity = np.array([len(self.entity_nodes[d][0])
+                                              for d in range(self.cell.dim+1)])
+                                            
+        # No need to define basis_coefs here, since they are no longer needed
+        # in the tabulate function (the number of basis functions are now d(=2)
+        # times the number of basis functions of the scalar element).
+
+        # The number of nodes in this element:
+        self.node_count = self.nodes.shape[0]
+
+
+    def tabulate(self, points, grad=False):
+        """Evaluate the basis functions of this finite element at the points
+        provided, based on the scalar finite element tabulation method.
+        """
+
+        # Tabulate the scalar finite element:
+        fe = self.element
+        sc_tab = fe.tabulate(points, grad=grad)
+
+        if not grad:
+            # The result is tensor T_{ijk}: point X_i evaluated at a set of basis
+            # function phi_j in the e_k canonical vector component.
+            # -> Tensor size: n. points x 2 * n. of scalar basis functions x 2
+            tab = np.zeros((sc_tab.shape[0], 2*sc_tab.shape[1], 2))
+
+            for i in range(sc_tab.shape[1]):
+                tab[:, 2*i, 0] = sc_tab[:, i]
+                tab[:, 2*i+1, 1] = sc_tab[:, i]
+
+        else:
+            # The result is tensor T_{ijkl}: gradient of the l-th component of phi_j in 
+            # the k-th direction evaluated at point X_i.
+            # -> Tensor size: n. points x 2 * n. of scalar basis functions x 2 x 2
+            tab = np.zeros((sc_tab.shape[0], 2*sc_tab.shape[1], sc_tab.shape[2], 2))
+
+            for i in range(sc_tab.shape[1]):
+                tab[:, 2*i, :, 0] = sc_tab[:, i, :]
+                tab[:, 2*i+1, :, 1] = sc_tab[:, i, :]
+
+        return tab
+
+
+    def interpolate(self, fn):
+        """Interpolate fn onto this finite element by evaluating it
+        at each of the nodes.
+
+        :param fn: A function ``fn(X)`` which takes a coordinate
+           vector and returns a scalar value.
+
+        :returns: A vector containing the value of ``fn`` at each node
+           of this element.
+
+        The implementation of this method is left as an :ref:`exercise
+        <ex-interpolate>`.
+
+        """
+        
+        return [fn(x) for x in self.nodes]
+
+
+    def __repr__(self):
+        return "%s(%s, %s)" % (self.__class__.__name__,
+                               self.cell,
+                               self.degree)

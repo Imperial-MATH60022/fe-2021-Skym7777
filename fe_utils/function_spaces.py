@@ -1,6 +1,6 @@
 import numpy as np
 from . import ReferenceTriangle, ReferenceInterval
-from .finite_elements import LagrangeElement, lagrange_points
+from .finite_elements import LagrangeElement, VectorFiniteElement, lagrange_points
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.tri import Triangulation
@@ -94,18 +94,42 @@ class Function(object):
 
         fs = self.function_space
 
-        # Create a map from the vertices to the element nodes on the
-        # reference cell.
-        cg1 = LagrangeElement(fs.element.cell, 1)
-        coord_map = cg1.tabulate(fs.element.nodes)
-        cg1fs = FunctionSpace(fs.mesh, cg1)
+        # Check if we are dealing with scalar of vector finite element:
+        
+        if isinstance(fs.element, VectorFiniteElement): # Vector version
+            cg1 = LagrangeElement(fs.element.cell, 1)
+            vg1 = VectorFiniteElement(cg1)
+            coord_map = vg1.tabulate(fs.element.nodes)
+            cg1fs = FunctionSpace(fs.mesh, cg1)
 
-        for c in range(fs.mesh.entity_counts[-1]):
-            # Interpolate the coordinates to the cell nodes.
-            vertex_coords = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
-            node_coords = np.dot(coord_map, vertex_coords)
+            for c in range(fs.mesh.entity_counts[-1]):
+                # vertex_coords are the same as in the scalar finite element, but with
+                # each of them repeated d(=2) times as we did for the nodes.
+                vertex_coords_sc = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
+                vertex_coords = np.zeros((2*vertex_coords_sc.shape[0], vertex_coords_sc.shape[1]))
+                for i in range(vertex_coords_sc.shape[0]):
+                    vertex_coords[2*i:2*(i+1)] = np.array([vertex_coords_sc[i], vertex_coords_sc[i]])
 
-            self.values[fs.cell_nodes[c, :]] = [fn(x) for x in node_coords]
+                # Perform the tensor contraction taking into account the additional dim. k:
+                node_coords = np.einsum('ijk,jk->ik', coord_map, vertex_coords)
+                
+                # Interpolate the coordinates to the cell nodes, using the dot product with the
+                # canonical basis, and return the coefficients of each basis function for fn:
+                self.values[fs.cell_nodes[c, :]] = [np.dot(fs.element.node_weights[i,:], fn(node_coords[i])) for i in range(node_coords.shape[0])]
+
+        else: # Scalar version
+            # Create a map from the vertices to the element nodes on the
+            # reference cell.
+            cg1 = LagrangeElement(fs.element.cell, 1)
+            coord_map = cg1.tabulate(fs.element.nodes)
+            cg1fs = FunctionSpace(fs.mesh, cg1)
+
+            for c in range(fs.mesh.entity_counts[-1]):
+                # Interpolate the coordinates to the cell nodes.
+                vertex_coords = fs.mesh.vertex_coords[cg1fs.cell_nodes[c, :], :]
+                node_coords = np.dot(coord_map, vertex_coords)
+                self.values[fs.cell_nodes[c, :]] = [fn(x) for x in node_coords]
+
 
     def plot(self, subdivisions=None):
         """Plot the value of this :class:`Function`. This is quite a low
@@ -122,6 +146,17 @@ class Function(object):
         """
 
         fs = self.function_space
+
+        if isinstance(fs.element, VectorFiniteElement):
+            coords = Function(fs)
+            coords.interpolate(lambda x: x)
+            fig = plt.figure()
+            ax = fig.gca()
+            x = coords.values.reshape(-1, 2)
+            v = self.values.reshape(-1, 2)
+            plt.quiver(x[:, 0], x[:, 1], v[:, 0], v[:, 1])
+            plt.show()
+            return
 
         d = subdivisions or (2 * (fs.element.degree + 1) if fs.element.degree > 1 else 2)
 

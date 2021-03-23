@@ -2,6 +2,11 @@
 If run as a script, the result is plotted. This file can also be
 imported as a module and convergence tests run on the solver.
 """
+from fe_utils import *
+import numpy as np
+from numpy import cos, pi
+import scipy.sparse as sp
+import scipy.sparse.linalg as splinalg
 from argparse import ArgumentParser
 
 
