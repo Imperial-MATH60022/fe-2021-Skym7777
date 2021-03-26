@@ -235,8 +235,7 @@ class VectorFiniteElement(FiniteElement): # Como modifico esta linea?
         self.node_weights = np.array([[i%2, (i+1)%2] for i in range(self.nodes.shape[0])])
 
         # Given the scalar version of entity_nodes, we replace each node n
-        # by 2n, 2n+1 for all n:
-        
+        # by 2n, 2n+1 for all n.
         # Initialize the dictionary:
         self.entity_nodes = {x: {y: [] for y in self.cell.topology[x]} for x in self.cell.topology}
         # Replace each n by 2n, 2n+1:

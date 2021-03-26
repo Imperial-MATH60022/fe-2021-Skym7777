@@ -47,7 +47,7 @@ def assemble(fs, f):
         # Implement modified products in equation (6.72) corresponding to the problem in (7.4):
         v = detJ * np.einsum('qi,k,qk,q->i', phi, f.values[nodes], phi, Q.weights)
                 
-        # Equation (6.78):
+        # Modified eq. (6.78) to problem (7.4):
         aux_m = np.einsum("ba,qib,ca,qjc->ijq", invJ, phi_grad, invJ, phi_grad)
         m = detJ * np.dot(aux_m, Q.weights)
 
